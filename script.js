@@ -1,35 +1,67 @@
-import { Calls } from "https://static.cloudflareinsights.com/calls-sdk.js";
+// Access the local and remote video elements
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+const startButton = document.getElementById('startButton');
 
-// Replace with your Cloudflare Calls account info
-const accountId = "your_account_id"; // Your Cloudflare Account ID
-const token = "your_access_token"; // Your Cloudflare Calls Access Token
+// Variables for handling the WebRTC connection
+let localStream;
+let peerConnection;
+let remoteStream;
 
-const startCallButton = document.getElementById("startCall");
-const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
+// STUN server configuration (for NAT traversal)
+const servers = {
+  iceServers: [
+    {
+      urls: 'stun:stun.l.google.com:19302',
+    },
+  ],
+};
 
+// Event listener for starting the call
+startButton.addEventListener('click', startCall);
+
+// Function to start the call
 async function startCall() {
-    const calls = new Calls({ accountId, token });
-
-    // Start a call session
-    const session = await calls.createSession();
-
-    // Get local media (audio/video)
-    const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  try {
+    // Get the local media stream (audio and video)
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     localVideo.srcObject = localStream;
 
-    // Attach local media to the session
-    session.attachMedia(localStream);
+    // Set up the peer-to-peer connection
+    peerConnection = new RTCPeerConnection(servers);
 
-    // Connect to the session
-    const room = await session.connect();
+    // Add the local stream to the peer connection
+    localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
 
-    // When a remote stream is received, attach it to the remote video element
-    room.on("track", (event) => {
-        if (event.streams && event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
-        }
-    });
+    // Set up the remote stream handling
+    peerConnection.ontrack = (event) => {
+      remoteStream = event.streams[0];
+      remoteVideo.srcObject = remoteStream;
+    };
+
+    // Create an offer and send it to the remote peer (signaling)
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    // Here, you would send the offer to the remote peer using your signaling mechanism (e.g., WebSocket, HTTP)
+    // Since we don't have signaling in this example, we simulate the process
+
+    // Simulate receiving the offer on the remote peer (for the sake of simplicity)
+    setTimeout(async () => {
+      // The remote peer sets up the connection and sends back an answer
+      const remotePeerConnection = new RTCPeerConnection(servers);
+      remotePeerConnection.ontrack = (event) => {
+        remoteVideo.srcObject = event.streams[0];
+      };
+
+      await remotePeerConnection.setRemoteDescription(offer);
+      const answer = await remotePeerConnection.createAnswer();
+      await remotePeerConnection.setLocalDescription(answer);
+
+      // Simulate sending the answer back to the initial peer
+      await peerConnection.setRemoteDescription(answer);
+    }, 1000);
+  } catch (error) {
+    console.error('Error accessing media devices.', error);
+  }
 }
-
-startCallButton.addEventListener("click", startCall);
